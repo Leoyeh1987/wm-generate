@@ -1,0 +1,2 @@
+# wm-generate
+WM generate
