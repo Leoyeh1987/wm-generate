@@ -1010,12 +1010,15 @@ const DOCX = (() => {
     if(M.titles && String(M.titles.t6||'').trim()) setTtl(L.comp[1],M.titles.t6.trim());
     if(M.op.title) setTtl(L.op,M.op.title);
     // 每圖一表的頁（複製 T6 表結構：標題列＋圖片列＋表頭＋資料列；圖片段沿用工程模式槽位段落）——機構元件、操作說明、HMI 共用
+    const PAGE_IMG_W = 12.8, PAGE_IMG_H = 10;
     const pageTbl = g => {
       const t = clone(hmiProto), trs = kids(t, 'tr');
       all(trs[0], 'p').forEach(p => { if (!txt(p).trim()) rm(p); });
       setPara(all(trs[0], 'p').find(p => txt(p).trim()), g.title);
       const itc = kids(trs[1], 'tc')[0]; kids(itc, 'p').forEach(rm);
       const ip = clone(engImgP), ds = drawingsIn(ip); setImage(ds[0], g.img); ds.slice(1).forEach(d => rm(runOf(d))); itc.appendChild(ip);
+      // v1.1.0：圖片依編輯畫面比例輸出（不再被拉成工程模式圖框比例），並縮在表格框內：寬 ≤ 12.8 cm、高 ≤ 10 cm
+      if (g.box) { const k = Math.min(1, PAGE_IMG_W / g.box[0], PAGE_IMG_H / g.box[1]); setExt(ds[0], Math.round(g.box[0] * k * 360000), Math.round(g.box[1] * k * 360000)); }
       if (g.head) kids(trs[2], 'tc').forEach((tc, i) => setCell(tc, g.head[i] ?? txt(tc)));
       const bodyProto = g.desc && kids(t, 'tr')[3] ? clone(kids(t, 'tr')[3]) : null;     // 公版資料列（說明列文字格原型）
       fillTable(t, 3, 3, g.rows, 3);
@@ -1060,10 +1063,10 @@ const DOCX = (() => {
       if (M.op.dropOp) { at = L.op.previousElementSibling; rm(L.op); log.push('操作說明沒有文字：移除公版「設備操作說明」空白表，改由每圖一表輸出'); }
       const put = t => { if (n || at.localName === 'tbl') { const sp = clone(spacer); at.parentNode.insertBefore(sp, at.nextSibling); at = sp; }     // 標題段後第一張表不插空白段
         at.parentNode.insertBefore(t, at.nextSibling); at = t; n++; };
-      M.op.imgs.forEach(g => put(pageTbl({ title: g.title, img: g.img, desc: g.desc, rows: g.rows, head: ['編號', '功能', '說明'] })));
+      M.op.imgs.forEach(g => put(pageTbl({ title: g.title, img: g.img, box: g.box, desc: g.desc, rows: g.rows, head: ['編號', '功能', '說明'] })));
       if (M.op.imgs.length) log.push(`操作說明：每張圖一表，共 ${M.op.imgs.length} 張`);
       // HMI 觸控螢幕操作說明頁：每頁＝標題列＋截圖＋編號/按鍵/功能表
-      if (hasHmi) M.hmi.forEach(g => { const t = pageTbl({ title: g.title, img: g.img || M.images.engPH, desc: g.desc, rows: g.rows, head: M.hmiHead || [] }); put(t); hmiT.push(t); });
+      if (hasHmi) M.hmi.forEach(g => { const t = pageTbl({ title: g.title, img: g.img || M.images.engPH, box: g.box, desc: g.desc, rows: g.rows, head: M.hmiHead || [] }); put(t); hmiT.push(t); });
     }
     // 權責組織圖
     fillCyan(L.orgH, []);
@@ -3766,8 +3769,8 @@ async function buildModel() {
   const t6Pages = [], I6 = numInfo('t6');
   for (const k of viewKeys('t6')) { const rows = t6Rows(k), c = await C(S.slots[k], k, viewItems('t6', k));
     if (k !== 't6A' && !c && !rows.length) continue;
-    t6Pages.push({ title: vTitle('t6', k), img: c || await PH(k, '機構元件圖 ' + k.slice(2)), rows: rows.map((r, i) => [String(i + 1), r.name || '', r.desc || '']) }); }
-  const opImgs = []; for (const x of S.op.imgs) { const items = () => x.rows.map((r,j)=>({id:r.id,label:(r.key||'').trim() || `項目 ${j+1}`})); const c = await C(x.slot, 'op', items); if (c || x.rows.length || String(x.desc||'').trim()) opImgs.push({title:String(x.title||'').trim() || '操作說明', img:c || await PH('op','操作說明圖 H6×W13.5'), desc:String(x.desc||'').trim(), rows:x.rows.map((r,j)=>[String(j+1),r.key||'',r.func||''])}); }
+    t6Pages.push({ box: ext(k), title: vTitle('t6', k), img: c || await PH(k, '機構元件圖 ' + k.slice(2)), rows: rows.map((r, i) => [String(i + 1), r.name || '', r.desc || '']) }); }
+  const opImgs = []; for (const x of S.op.imgs) { const items = () => x.rows.map((r,j)=>({id:r.id,label:(r.key||'').trim() || `項目 ${j+1}`})); const c = await C(x.slot, 'op', items); if (c || x.rows.length || String(x.desc||'').trim()) opImgs.push({box: ext('op'), title:String(x.title||'').trim() || '操作說明', img:c || await PH('op','操作說明圖 H6×W13.5'), desc:String(x.desc||'').trim(), rows:x.rows.map((r,j)=>[String(j+1),r.key||'',r.func||''])}); }
   // 七、流程圖：原圖直接放入（不重新壓縮），依原比例縮放到設定寬度
   const flow = []; for (const f of S.flow) { const r = store.get(f.img);
     flow.push({ title: (f.title || '').trim(), lines: String(f.note || '').split('\n').map(x => x.trim()).filter(Boolean),
@@ -3790,7 +3793,7 @@ async function buildModel() {
     for (const x of outH.filter(y => y.custom || !hazIcon(y.key))) def.push(await dItem(x)); }
   const codes = k => { const L = codeList(S[k]); return S[k].map((r, i) => ({ code: L[i], name: r.name, fix: r.fix, merge: i > 0 && !!r.merge })); };
   const ghs = []; for (const g of S.ghs) { const r=store.get(g.img); if(r) { const s=Math.min(13.0/r.w,17.0/r.h); ghs.push({title:String(g.title||'').trim(),img:{...(await imgBytes(r)),cm:[+(r.w*s).toFixed(3),+(r.h*s).toFixed(3)]}}); } }
-  const hmi = []; for (const g of S.hmi) hmi.push({ title: hmiTitle(g), desc: String(g.desc || '').trim(), img: await C(g.slot, 'eng', hmiItems(g)), rows: g.rows.map((r, j) => [String(j + 1), r.key || '', r.func || '']) });
+  const hmi = []; for (const g of S.hmi) hmi.push({ box: ext('eng'), title: hmiTitle(g), desc: String(g.desc || '').trim(), img: await C(g.slot, 'eng', hmiItems(g)), rows: g.rows.map((r, j) => [String(j + 1), r.key || '', r.func || '']) });
   return {
     pi: !!m.pi, meta: { ...m, date: slash(m.date) }, revs: S.revs.map(r => ({ ...r, date: slash(r.date) })),
     specs: S.specs, haz, def, ghs, titles:{ t5: String(S.titles.t5 || '').trim() || T5DEF, t6: '' },     // 只輸出圖上有標註的項目，依清單順序重編 1..n（同位置群組同編號）
